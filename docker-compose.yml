@@ -1,0 +1,9 @@
+version: '3.3'
+
+services:
+  aerodyne-webapp:
+    container_name: aerodyne-webapp
+    build: ./
+    image: aerodyne-webapp:1.0.1
+    ports:
+      - '9000:80'

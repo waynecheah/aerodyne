@@ -1,0 +1,8 @@
+.git
+.vscode
+dist
+node_modules
+.editorconfig
+.gitignore
+aerodyne.code-workspace
+docker-compose.yml
