@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core'
 import { MatCardModule } from '@angular/material/card'
 import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { GoogleMapsModule } from '@angular/google-maps'
 import { MatButtonModule } from '@angular/material/button'
 import { MatFormFieldModule } from '@angular/material/form-field'
 import { MatGridListModule } from '@angular/material/grid-list'
@@ -20,6 +21,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations'
     BrowserModule,
     BrowserAnimationsModule,
     FormsModule,
+    GoogleMapsModule,
     MatButtonModule,
     MatCardModule,
     MatFormFieldModule,
