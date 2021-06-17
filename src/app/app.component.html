@@ -48,9 +48,9 @@
     </mat-card-header>
     <mat-card-content>
       <form class="restaurant-form">
-        <table class="table-cell">
+        <table class="table-cell add-row">
           <tr>
-            <td>
+            <td style="padding-left: 10px;">
               <mat-form-field class="restaurant-form-field">
                 <mat-label>Restaurant Name</mat-label>
                 <input type="text" matInput [formControl]="restaurantFormControl" placeholder="Ex. McDonald's" />
@@ -108,6 +108,77 @@
               <button mat-raised-button color="primary" (click)='addData()' [disabled]="!isFormValid">Save</button>
             </td>
           </tr>
+          <tr>
+            <td colspan="5" style="padding: 10px;">
+              <div *ngIf="!uploader?.queue?.length">
+                <div ng2FileDrop class="dropzone"
+                  [ngClass]="{'nv-file-over': hasBaseDropZoneOver}"
+                  (fileOver)="fileOverBase($event)"
+                  [uploader]="uploader"
+                  class="well my-drop-zone"
+                >Drop image here to upload</div>
+                <input type="file" ng2FileSelect [uploader]="uploader" />
+              </div>
+
+              <div *ngIf="uploader?.queue?.length">
+                <table class="table-cell uploader">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left;">Name</th>
+                      <th>Size</th>
+                      <th style="width: 25%;">Progress</th>
+                      <th style="text-align: center;">Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr *ngFor="let item of uploader.queue">
+                      <td><strong>{{ item?.file?.name }}</strong></td>
+                      <td *ngIf="uploader.options.isHTML5" nowrap>{{ item?.file?.size/1024/1024 | number:'.2' }} MB</td>
+                      <td *ngIf="uploader.options.isHTML5">
+                        <div class="progress" style="margin-bottom: 0;">
+                          <mat-progress-bar color="warn" mode="determinate" [value]="item.progress"></mat-progress-bar>
+                        </div>
+                      </td>
+                      <td style="text-align: center;">
+                        <span *ngIf="item.isSuccess"><mat-icon color="primary">task_alt</mat-icon></span>
+                        <span *ngIf="item.isCancel"><mat-icon>highlight_off</mat-icon></span>
+                        <span *ngIf="item.isError"><mat-icon color="warn">error</mat-icon></span>
+                      </td>
+                      <td style="text-align: center;">
+                        <button mat-button color="primary" (click)="item.upload()" [disabled]="item.isReady || item.isUploading || item.isSuccess">
+                          <mat-icon>cloud_upload</mat-icon> Upload
+                        </button>
+                        <button mat-button color="accent" (click)="item.cancel()" [disabled]="!item.isUploading">
+                          <mat-icon>cancel</mat-icon> Cancel
+                        </button>
+                        <button mat-button color="warn" (click)="item.remove()">
+                          <mat-icon>delete</mat-icon> Remove
+                        </button>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div style="display: none;">
+                  <div>
+                    Queue progress:
+                    <div class="progress" style="">
+                        <div class="progress-bar" role="progressbar" [ngStyle]="{ 'width': uploader.progress + '%' }"></div>
+                    </div>
+                  </div>
+                  <button mat-flat-button color="primary" (click)="uploader.uploadAll()" [disabled]="!uploader.getNotUploadedItems().length">
+                    <mat-icon>cloud_upload</mat-icon> Upload all
+                  </button>&nbsp;
+                  <button mat-flat-button color="accent" (click)="uploader.cancelAll()" [disabled]="!uploader.isUploading">
+                    <mat-icon>cancel</mat-icon> Cancel all
+                  </button>&nbsp;
+                  <button mat-flat-button color="warn" (click)="uploader.clearQueue()" [disabled]="!uploader.queue.length">
+                    <mat-icon>delete</mat-icon> Remove all
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
         </table>
       </form>
 
@@ -119,14 +190,18 @@
       <table mat-table [dataSource]="dataSource" class="mat-elevation-z8 table-cell">
         <ng-container [matColumnDef]="column" *ngFor="let column of displayedColumns">
           <th mat-header-cell *matHeaderCellDef>{{column}}</th>
-          <td mat-cell *matCellDef="let element" (click)="onRestaurant(element)">{{element[column]}}</td>
+          <td mat-cell *matCellDef="let element" (click)="onRestaurant(element, column)">
+            <span *ngIf="column!='delete'">{{element[column]}}</span>
+            <mat-icon *ngIf="column=='delete'" (click)="onDelete(element)">delete_outline</mat-icon>
+          </td>
         </ng-container>
+        <ng-container matColumnDef="delete2" stickyEnd></ng-container>
 
         <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
 
         <tr class="mat-row" *matNoDataRow>
-          <td class="mat-cell" colspan="4">No data matching the filter "{{input.value}}"</td>
+          <td class="mat-cell" colspan="5">No data matching the filter "{{input.value}}"</td>
         </tr>
       </table>
 

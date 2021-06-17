@@ -1,7 +1,9 @@
 import { Component, ElementRef, OnInit, ViewChild } from '@angular/core'
 import { AbstractControl, FormControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms'
 import { GoogleMap } from '@angular/google-maps'
+import { MatSnackBar } from '@angular/material/snack-bar'
 import { MatTable, MatTableDataSource } from '@angular/material/table'
+import { FileUploader } from 'ng2-file-upload'
 
 
 export interface Restaurant {
@@ -11,6 +13,7 @@ export interface Restaurant {
   latitude: number
   longitude: number
   type: string
+  delete: string
 }
 interface PlaceMarkerOptions {
   center?: boolean
@@ -29,7 +32,8 @@ export class AppComponent implements OnInit  {
       coordinate: '2.901253, 101.652031',
       latitude: 2.901253,
       longitude: 101.652031,
-      type: 'Cafe'
+      type: 'Cafe',
+      delete: '1'
     },
     {
       no: 2,
@@ -37,7 +41,8 @@ export class AppComponent implements OnInit  {
       coordinate: '3.0502805, 101.6282397',
       latitude: 	3.0502805,
       longitude: 101.6282397,
-      type: 'Beverage'
+      type: 'Beverage',
+      delete: '2'
     },
     {
       no: 3,
@@ -45,11 +50,15 @@ export class AppComponent implements OnInit  {
       coordinate: '3.0378286, 101.6571857',
       latitude: 	3.0378286,
       longitude: 101.6571857,
-      type: 'Fast Food'
+      type: 'Fast Food',
+      delete: '3'
     }
   ])
-  displayedColumns: string[] = ['no', 'restaurant', 'coordinate', 'type']
+  displayedColumns: string[] = ['no', 'restaurant', 'coordinate', 'type', 'delete']
+  hasBaseDropZoneOver: boolean = false
   markers: google.maps.MarkerOptions[] = []
+  uploader: FileUploader
+
 
   @ViewChild('googleMapRef')
   googleMaps!: GoogleMap
@@ -75,10 +84,30 @@ export class AppComponent implements OnInit  {
   typeFormControl = new FormControl('', [Validators.required])
   title = 'Aerodyne'
 
-  constructor (private element: ElementRef) { }
+  constructor (
+    private _snackBar: MatSnackBar,
+    private element: ElementRef
+  ) {
+    this.uploader = new FileUploader({
+      url: 'http://localhost:3000/api/',
+      disableMultipart: true,
+      formatDataFunctionIsAsync: true,
+      formatDataFunction: async (item: any) => {
+        return new Promise( (resolve, reject) => {
+          resolve({
+            name: item._file.name,
+            length: item._file.size,
+            contentType: item._file.type,
+            date: new Date()
+          })
+        })
+      }
+    })
+  }
 
   ngOnInit () {
     this.loadRestaurants()
+
     setTimeout(() => {
       this.fitBounds()
     }, 500)
@@ -91,7 +120,8 @@ export class AppComponent implements OnInit  {
       restaurant: this.restaurantFormControl.value,
       latitude: this.latitudeFormControl.value,
       longitude: this.longitudeFormControl.value,
-      type: this.typeFormControl.value
+      type: this.typeFormControl.value,
+      delete: `${this.dataSource.data.length + 1}`
     }
 
     ;[
@@ -125,6 +155,8 @@ export class AppComponent implements OnInit  {
     formControl.reset()
   }
 
+  fileOverBase (evt: any) {}
+
   get isFormValid () {
     return (
       this.restaurantFormControl.valid &&
@@ -134,19 +166,65 @@ export class AppComponent implements OnInit  {
     )
   }
 
-  onRestaurant (el: any) {
+  onDelete (obj: Restaurant) {
+    const list = this.dataSource.data.filter(itm => (itm.no != obj.no))
+
+    this.dataSource.data = list
+    this.table.renderRows()
+
+    this.markers = this.markers.filter(marker => {
+      return (marker.position?.lat != obj.latitude && marker.position?.lng != obj.longitude)
+    })
     this.fitBounds()
+
+    this._snackBar.open(`${obj.restaurant} has deleted successfully.`, 'undo').onAction().subscribe(() => {
+      this.dataSource.data.push(obj)
+      this.dataSource.data.sort((a: Restaurant, b: Restaurant) => {
+        if (a.no > b.no) return 1
+        if (a.no < b.no) return -1
+        return 0
+      })
+      this.table.renderRows()
+      this.putMarker(obj.latitude, obj.longitude, obj.restaurant)
+      this.fitBounds()
+    })
+  }
+
+  onRestaurant (el: any, col: string) {
+    if (col == 'delete') return
+
+    const zoom = this.googleMaps.googleMap?.getZoom() || 0
+    const diff = zoom - 10
+    const fps  = 100
+
+    // simulate zoom out
+    for (let x=1; x<=diff; x++) {
+      const zoomTo = zoom - x
+
+      setTimeout(()=>{
+        this.googleMaps.googleMap?.setZoom(zoomTo)
+      }, (x * fps))
+    }
 
     setTimeout(() => {
       const { latitude: lat, longitude: lng } = el
-  
+      const currentZoom = 10
+
       this.googleMaps.panTo({ lat, lng })
-      this.googleMaps.googleMap?.setZoom(15)
-    }, 800)
+
+      // simulate zoom in
+      for (let x=1; x<=5; x++) {
+        const zoomTo = currentZoom + x
+
+        setTimeout(()=>{
+          this.googleMaps.googleMap?.setZoom(zoomTo)
+        }, (x * fps))
+      }
+    }, diff * fps)
   }
 
   zoomChanged () {
-    console.log('zoom changed', this.googleMaps.getZoom())
+    // console.log('zoom changed', this.googleMaps.getZoom())
   }
 
 
@@ -190,8 +268,8 @@ export class AppComponent implements OnInit  {
     this.markers = markers
   }
 
-  private putMarker (lat: number, lng: number, restaurant: string, options: PlaceMarkerOptions) {
-    const { center=false } = options || {}
+  private putMarker (lat: number, lng: number, restaurant: string, options: PlaceMarkerOptions = {}) {
+    const { center=false } = options
 
     if (center) {
       this.googleMaps.panTo({ lat, lng })
