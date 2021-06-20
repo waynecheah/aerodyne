@@ -236,12 +236,52 @@ div.my-drop-zone
   text-align: center
   width: 68%
 
+div.loading-shade
+  align-items: center
+  background-color: rgba(0, 0, 0, 0.15)
+  border-radius: 10px 10px 0 0
+  bottom: 20px
+  display: flex
+  justify-content: center
+  left: 16px
+  position: absolute
+  right: 16px
+  top: 55px
+  z-index: 1
+
 table.table-cell.add-row
   background-color: #dcf5d2
-  border-radius: 10px
 
-table.table-cell.uploader thead tr th
-  color: #218e10
+table.table-cell
+  border-radius: 10px
+  td.selected
+    background-color: #d6ffcc
+    container-element
+      color: #008404
+  .mat-card-avatar
+    background-color: lightgrey
+    background-size: cover
+
+table.filters
+  .mat-form-field-flex
+    background-color: white
+  .mat-form-field-wrapper
+    padding-bottom: 15px
+  .type-selection
+    color: #898b89
+    font-size: 12px
+
+table.table-cell.uploader
+  thead tr th
+    color: #218e10
+  tbody tr td
+    padding: 0 5px
+  tbody tr td:first-child
+    padding-right: 15px
+    strong
+      display: block
+      max-width: 180px
+      word-break: break-all
 
 td.buttonColumn
   vertical-align: middle !important

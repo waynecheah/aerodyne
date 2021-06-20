@@ -1,13 +1,19 @@
-import { Component, ElementRef, OnInit, ViewChild } from '@angular/core'
+import { Component, ElementRef, Inject, OnDestroy, OnInit, ViewChild } from '@angular/core'
 import { AbstractControl, FormControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms'
 import { GoogleMap } from '@angular/google-maps'
+import { MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog'
 import { MatSnackBar } from '@angular/material/snack-bar'
 import { MatTable, MatTableDataSource } from '@angular/material/table'
-import { FileUploader } from 'ng2-file-upload'
+import { FileItem, FileUploader, ParsedResponseHeaders } from 'ng2-file-upload'
+import { Subscription } from 'rxjs'
+
+import { environment } from '../environments/environment'
+import { ApiService } from './app.service'
 
 
 export interface Restaurant {
   no: number
+  image: string
   restaurant: string
   coordinate: string
   latitude: number
@@ -24,48 +30,11 @@ interface PlaceMarkerOptions {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.sass']
 })
-export class AppComponent implements OnInit  {
-  dataSource = new MatTableDataSource([
-    {
-      no: 1,
-      restaurant: 'Aerodyne',
-      coordinate: '2.901253, 101.652031',
-      latitude: 2.901253,
-      longitude: 101.652031,
-      type: 'Cafe',
-      delete: '1'
-    },
-    {
-      no: 2,
-      restaurant: 'Tealive Petronas Sg. Besi',
-      coordinate: '3.0502805, 101.6282397',
-      latitude: 	3.0502805,
-      longitude: 101.6282397,
-      type: 'Beverage',
-      delete: '2'
-    },
-    {
-      no: 3,
-      restaurant: 'McDonald’s Bandar Kinrara',
-      coordinate: '3.0378286, 101.6571857',
-      latitude: 	3.0378286,
-      longitude: 101.6571857,
-      type: 'Fast Food',
-      delete: '3'
-    }
-  ])
-  displayedColumns: string[] = ['no', 'restaurant', 'coordinate', 'type', 'delete']
+export class AppComponent implements OnDestroy, OnInit  {
+  dataSource!: MatTableDataSource<Restaurant>
+  displayedColumns: string[] = ['no', 'image', 'restaurant', 'coordinate', 'type', 'delete']
   hasBaseDropZoneOver: boolean = false
-  markers: google.maps.MarkerOptions[] = []
-  uploader: FileUploader
-
-
-  @ViewChild('googleMapRef')
-  googleMaps!: GoogleMap
-
-  @ViewChild(MatTable)
-  table!: MatTable<Restaurant>
-
+  isLoadingResults = true
   latitudeFormControl = new FormControl('', [
     Validators.required,
     this.coordinateValidator(
@@ -80,48 +49,80 @@ export class AppComponent implements OnInit  {
       { 'precision': 'Longitude must have a valid coordinate' }
     )
   ])
+  markers: google.maps.MarkerOptions[] = []
   restaurantFormControl = new FormControl('', [Validators.required])
-  typeFormControl = new FormControl('', [Validators.required])
+  restaurantImage = ''
+  restaurantTypes = new FormControl()
+  selected = ''
   title = 'Aerodyne'
+  typeFormControl = new FormControl('', [Validators.required])
+  typeList: string[] = []
+  uploader!: FileUploader
+  private querySubscription!: Subscription
+  private rawData: Restaurant[] = []
+
+  @ViewChild('googleMapRef')
+  googleMaps!: GoogleMap
+
+  @ViewChild(MatTable)
+  table!: MatTable<Restaurant>
 
   constructor (
     private _snackBar: MatSnackBar,
+    private apiService: ApiService,
+    public dialog: MatDialog,
     private element: ElementRef
-  ) {
-    this.uploader = new FileUploader({
-      url: 'http://localhost:3000/api/',
-      disableMultipart: true,
-      formatDataFunctionIsAsync: true,
-      formatDataFunction: async (item: any) => {
-        return new Promise( (resolve, reject) => {
-          resolve({
-            name: item._file.name,
-            length: item._file.size,
-            contentType: item._file.type,
-            date: new Date()
-          })
-        })
-      }
-    })
-  }
+  ) { }
 
   ngOnInit () {
-    this.loadRestaurants()
+    this.initTypeFilter()
+    this.initUploader()
 
-    setTimeout(() => {
-      this.fitBounds()
-    }, 500)
+    this.dataSource = new MatTableDataSource()
+
+    this.querySubscription = this.apiService.getData().subscribe(({ data, loading }) => {
+      this.isLoadingResults = loading
+
+      if (!loading) {
+        const { restaurants } = data
+
+        this.dataSource.data = Array.isArray(restaurants) ? restaurants.slice() : []
+        this.rawData         = Array.isArray(restaurants) ? restaurants : []
+
+        this.table.renderRows()
+        this.updateTypes()
+        this.renderRestaurantMarkers()
+        setTimeout(() => {
+          this.fitBounds()
+        }, 500)
+      }
+    }, err => {
+      this.isLoadingResults = false
+      this._snackBar.open(err)
+    }, )
+  }
+
+  ngOnDestroy () {
+    this.querySubscription.unsubscribe()
   }
 
   addData () {
+    let no = 0
+
+    if (Array.isArray(this.dataSource.data) && this.dataSource.data.length) {
+      const [last] = this.dataSource.data.slice(-1)
+      no = last.no
+    }
+
     const element = {
-      no: this.dataSource.data.length + 1,
+      no: no + 1,
+      image: this.restaurantImage,
       coordinate: `${this.latitudeFormControl.value}, ${this.longitudeFormControl.value}`,
       restaurant: this.restaurantFormControl.value,
       latitude: this.latitudeFormControl.value,
       longitude: this.longitudeFormControl.value,
       type: this.typeFormControl.value,
-      delete: `${this.dataSource.data.length + 1}`
+      delete: Date.now().toString()
     }
 
     ;[
@@ -130,24 +131,31 @@ export class AppComponent implements OnInit  {
       this.latitudeFormControl,
       this.longitudeFormControl
     ].map((el: FormControl) => this.clearText(el))
+    this.restaurantImage = ''
 
-    const list = this.dataSource.data
-
-    list.push(element)
-
-    this.dataSource.data = list
+    this.dataSource.data.push(element)
+    this.rawData.push(element)
     this.table.renderRows()
+    this.updateTypes()
     this.putMarker(element.latitude, element.longitude, element.restaurant, { center: true })
+
+    this.apiService.create(element).subscribe(result => {
+      const { _id, _ref } = result?.data?.createRestaurant
+
+      element.no     = _ref
+      element.delete = _id
+
+      this.uploader.clearQueue()
+
+    }, err => {
+      this._snackBar.open(err)
+    })
   }
 
   applyFilter (event: Event) {
     const filterValue = (event.target as HTMLInputElement).value
 
-    this.dataSource.filter = filterValue.trim().toLowerCase()
-  }
-
-  removeData () {
-    this.table.renderRows()
+    this.dataSource.filter = (filterValue) ? filterValue.trim().toLowerCase() : ''
   }
 
   clearText (formControl: FormControl) {
@@ -167,7 +175,17 @@ export class AppComponent implements OnInit  {
   }
 
   onDelete (obj: Restaurant) {
-    const list = this.dataSource.data.filter(itm => (itm.no != obj.no))
+    const list = this.dataSource.data.filter(itm => (itm.delete != obj.delete))
+
+    this.apiService.remove(obj.delete).subscribe(res => {
+      console.log('Restaurant deleted', res)
+    }, err => {
+      this._snackBar.open(err)
+      this.restoreDeleted(obj)
+    })
+
+    this.selected = ''
+    this.rawData  = this.rawData.filter(itm => (itm.delete != obj.delete))
 
     this.dataSource.data = list
     this.table.renderRows()
@@ -178,15 +196,13 @@ export class AppComponent implements OnInit  {
     this.fitBounds()
 
     this._snackBar.open(`${obj.restaurant} has deleted successfully.`, 'undo').onAction().subscribe(() => {
-      this.dataSource.data.push(obj)
-      this.dataSource.data.sort((a: Restaurant, b: Restaurant) => {
-        if (a.no > b.no) return 1
-        if (a.no < b.no) return -1
-        return 0
+      this.restoreDeleted(obj)
+
+      this.apiService.restore(obj.delete).subscribe(res => {
+        console.log('Restaurant restored', res)
+      }, err => {
+        this._snackBar.open(err)
       })
-      this.table.renderRows()
-      this.putMarker(obj.latitude, obj.longitude, obj.restaurant)
-      this.fitBounds()
     })
   }
 
@@ -195,7 +211,9 @@ export class AppComponent implements OnInit  {
 
     const zoom = this.googleMaps.googleMap?.getZoom() || 0
     const diff = zoom - 10
-    const fps  = 100
+    const fps  = 200
+
+    this.selected = el.no
 
     // simulate zoom out
     for (let x=1; x<=diff; x++) {
@@ -250,22 +268,63 @@ export class AppComponent implements OnInit  {
     this.googleMaps.fitBounds(bounds)
   }
 
-  private loadRestaurants () {
-    const markers: google.maps.MarkerOptions[] = []
-
-    this.dataSource.data.map((itm: Restaurant) => {
-      const { latitude: lat, longitude: lng, restaurant } = itm
-      const marker = {
-        animation: google.maps.Animation.DROP,
-        draggable: false,
-        position: { lat, lng },
-        title: restaurant
+  private initTypeFilter () {
+    this.restaurantTypes.valueChanges.subscribe(value => {
+      if (!value || value.length === 0) {
+        this.dataSource.data = this.rawData.slice()
+        this.table.renderRows()
+        return
       }
 
-      markers.push(marker)
+      this.dataSource.data = this.rawData.filter((itm: Restaurant) => (value.includes(itm.type)))
+      this.table.renderRows()
+    })
+  }
+
+  private initUploader () {
+    this.uploader = new FileUploader({
+      url: environment.uploadUrl,
+      disableMultipart: false,
+      itemAlias: 'restaurant'
     })
 
-    this.markers = markers
+    this.uploader.onSuccessItem = (item: FileItem, response: string, status: number, headers: ParsedResponseHeaders)=>{
+      const res = JSON.parse(response)
+
+      this.restaurantImage = res.url
+    }
+
+    this.uploader.onErrorItem = (item: FileItem, response: string, status: number, headers: ParsedResponseHeaders)=>{
+      const res = JSON.parse(response)
+
+      this.dialog.open(ContentDialogComponent, {
+        width: '600px',
+        data: {
+          content: `Fail to upload file: ${item.file.name}. ${res.error}. Do you want to select another file?`,
+          title: 'Error Upload File'
+        }
+      }).afterClosed().subscribe(result => {
+        if (result === 'ok') {
+          this.uploader.removeFromQueue(item)
+        }
+      })
+    }
+
+    this.uploader.onAfterAddingFile = (item: FileItem)=>{
+      if (item.file.type.indexOf('image/') !== -1) return
+
+      this.dialog.open(ContentDialogComponent, {
+        width: '600px',
+        data: {
+          content: `Invalid type file: ${item.file.type}. Do you want to select another file?`,
+          title: 'Error Process File'
+        }
+      }).afterClosed().subscribe(result => {
+        if (result === 'ok') {
+          this.uploader.removeFromQueue(item)
+        }
+      })
+    }
   }
 
   private putMarker (lat: number, lng: number, restaurant: string, options: PlaceMarkerOptions = {}) {
@@ -291,5 +350,79 @@ export class AppComponent implements OnInit  {
       position: { lat, lng },
       title: restaurant
     })
+  }
+
+  private renderRestaurantMarkers () {
+    const markers: google.maps.MarkerOptions[] = []
+
+    this.dataSource.data.map((itm: Restaurant) => {
+      const { latitude: lat, longitude: lng, restaurant } = itm
+      const marker = {
+        animation: google.maps.Animation.DROP,
+        draggable: false,
+        position: { lat, lng },
+        title: restaurant
+      }
+
+      markers.push(marker)
+    })
+
+    this.markers = markers
+  }
+
+  private restoreDeleted (obj: Restaurant) {
+    this.dataSource.data.push(obj)
+    this.dataSource.data.sort((a: Restaurant, b: Restaurant) => {
+      if (a.no > b.no) return 1
+      if (a.no < b.no) return -1
+      return 0
+    })
+
+    this.rawData.push(obj)
+    this.rawData.sort((a: Restaurant, b: Restaurant) => {
+      if (a.no > b.no) return 1
+      if (a.no < b.no) return -1
+      return 0
+    })
+
+    this.table.renderRows()
+    this.putMarker(obj.latitude, obj.longitude, obj.restaurant)
+    this.fitBounds()
+  }
+
+  private updateTypes () {
+    const list: string[] = []
+
+    this.rawData.map((itm: Restaurant)=>{
+      if (list.includes(itm.type)) return
+
+      list.push(itm.type)
+    })
+
+    list.sort()
+
+    this.typeList = list
+  }
+}
+
+
+@Component({
+  selector: 'content-dialog',
+  templateUrl: 'content-dialog.component.html'
+})
+export class ContentDialogComponent {
+  constructor (
+    public dialogRef: MatDialogRef<ContentDialogComponent>,
+    @Inject(MAT_DIALOG_DATA)
+    public data: any
+  ) { }
+
+  onNoClick (): void {
+    this.data.removeFile = false
+    this.dialogRef.close()
+  }
+
+  onYesClick () {
+    this.data.removeFile = true
   }
 }

@@ -41,16 +41,23 @@
   <!-- Resources -->
   <h2>Part 1: Reactive Web Development</h2>
 
-  <mat-card class="main-card">
+  <mat-card class="main-card" style="min-width: 928px; padding-bottom: 20px;">
     <mat-card-header>
       <div mat-card-avatar class="header-image"></div>
       <mat-card-title>List of Restaurants</mat-card-title>
     </mat-card-header>
     <mat-card-content>
+      <div class="loading-shade" *ngIf="isLoadingResults">
+        <mat-spinner *ngIf="isLoadingResults"></mat-spinner>
+      </div>
+
       <form class="restaurant-form">
         <table class="table-cell add-row">
           <tr>
             <td style="padding-left: 10px;">
+              <div mat-card-avatar [ngStyle]="{ 'background-image': 'url('+restaurantImage+')'}"></div>
+            </td>
+            <td>
               <mat-form-field class="restaurant-form-field">
                 <mat-label>Restaurant Name</mat-label>
                 <input type="text" matInput [formControl]="restaurantFormControl" placeholder="Ex. McDonald's" />
@@ -109,7 +116,7 @@
             </td>
           </tr>
           <tr>
-            <td colspan="5" style="padding: 10px;">
+            <td colspan="6" style="padding: 10px;">
               <div *ngIf="!uploader?.queue?.length">
                 <div ng2FileDrop class="dropzone"
                   [ngClass]="{'nv-file-over': hasBaseDropZoneOver}"
@@ -117,7 +124,7 @@
                   [uploader]="uploader"
                   class="well my-drop-zone"
                 >Drop image here to upload</div>
-                <input type="file" ng2FileSelect [uploader]="uploader" />
+                <input type="file" ng2FileSelect accept="image/*" [uploader]="uploader" />
               </div>
 
               <div *ngIf="uploader?.queue?.length">
@@ -126,7 +133,7 @@
                     <tr>
                       <th style="text-align: left;">Name</th>
                       <th>Size</th>
-                      <th style="width: 25%;">Progress</th>
+                      <th style="width: 20%;">Progress</th>
                       <th style="text-align: center;">Status</th>
                       <th>Actions</th>
                     </tr>
@@ -137,7 +144,7 @@
                       <td *ngIf="uploader.options.isHTML5" nowrap>{{ item?.file?.size/1024/1024 | number:'.2' }} MB</td>
                       <td *ngIf="uploader.options.isHTML5">
                         <div class="progress" style="margin-bottom: 0;">
-                          <mat-progress-bar color="warn" mode="determinate" [value]="item.progress"></mat-progress-bar>
+                          <mat-progress-bar mode="determinate" [value]="item.progress"></mat-progress-bar>
                         </div>
                       </td>
                       <td style="text-align: center;">
@@ -162,7 +169,7 @@
                 <div style="display: none;">
                   <div>
                     Queue progress:
-                    <div class="progress" style="">
+                    <div class="progress">
                         <div class="progress-bar" role="progressbar" [ngStyle]="{ 'width': uploader.progress + '%' }"></div>
                     </div>
                   </div>
@@ -182,17 +189,43 @@
         </table>
       </form>
 
-      <mat-form-field>
-        <mat-label>Filter</mat-label>
-        <input matInput (keyup)="applyFilter($event)" placeholder="Ex. kfc" #input>
-      </mat-form-field>
+      <table class="table-cell filters" style="margin-top: 18px;">
+        <tr>
+          <td>
+            <mat-form-field>
+              <mat-label>Filter</mat-label>
+              <input matInput (keyup)="applyFilter($event)" placeholder="Ex. kfc" #input>
+              <button *ngIf="input.value" matSuffix mat-icon-button aria-label="Clear" (click)="input.value = ''; applyFilter($event)">
+                <mat-icon>clear</mat-icon>
+              </button>
+            </mat-form-field>
+          </td>
+          <td style="text-align: right;">
+            <mat-form-field appearance="fill">
+              <mat-label>Type</mat-label>
+              <mat-select [formControl]="restaurantTypes" multiple>
+                <mat-select-trigger>
+                  {{restaurantTypes.value ? restaurantTypes.value[0] : ''}}
+                  <span *ngIf="restaurantTypes.value?.length > 1" class="type-selection">
+                    (+{{restaurantTypes.value.length - 1}} {{restaurantTypes.value?.length === 2 ? 'other' : 'others'}})
+                  </span>
+                </mat-select-trigger>
+                <mat-option *ngFor="let type of typeList" [value]="type">{{type}}</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </td>
+        </tr>
+      </table>
 
       <table mat-table [dataSource]="dataSource" class="mat-elevation-z8 table-cell">
         <ng-container [matColumnDef]="column" *ngFor="let column of displayedColumns">
           <th mat-header-cell *matHeaderCellDef>{{column}}</th>
-          <td mat-cell *matCellDef="let element" (click)="onRestaurant(element, column)">
-            <span *ngIf="column!='delete'">{{element[column]}}</span>
-            <mat-icon *ngIf="column=='delete'" (click)="onDelete(element)">delete_outline</mat-icon>
+          <td mat-cell *matCellDef="let element" (click)="onRestaurant(element, column)" [class.selected]="selected == element.no">
+            <container-element [ngSwitch]="true">
+              <div *ngSwitchCase="column=='image'" mat-card-avatar [ngStyle]="{ 'background-image': 'url('+element[column]+')'}"></div>
+              <mat-icon *ngSwitchCase="column=='delete'" (click)="onDelete(element)">delete_outline</mat-icon>
+              <span *ngSwitchDefault>{{element[column]}}</span>
+            </container-element>
           </td>
         </ng-container>
         <ng-container matColumnDef="delete2" stickyEnd></ng-container>
@@ -205,19 +238,12 @@
         </tr>
       </table>
 
-      <p>&nbsp;</p>
-      <p>
-        Aerodyne have multiple platforms (web-based system and apps) to cater different
-        varieties of industries, to cater for their different needs and requirements.
-        Basically, what the pilots capture during their mission will be analyzed and visualized via
-        the web app.
-      </p>
     </mat-card-content>
   </mat-card>
 
   <div style="height: 25px;"></div>
 
-  <mat-card class="main-card">
+  <mat-card class="map-card" style="margin-bottom: 30px;">
     <mat-card-header>
       <mat-card-title></mat-card-title>
     </mat-card-header>
