@@ -19,7 +19,6 @@ steps:
   - '--platform'
   - '$_PLATFORM'
   - '--quiet'
-  - '--update-env-vars'
   # Allocate 100% of the traffic to latest revision
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
