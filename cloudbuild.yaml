@@ -20,8 +20,6 @@ steps:
   - '$_PLATFORM'
   - '--quiet'
   - '--update-env-vars'
-  - >-
-    PORT=$_PORT
   # Allocate 100% of the traffic to latest revision
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
