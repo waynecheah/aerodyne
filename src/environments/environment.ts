@@ -5,7 +5,7 @@
 export const environment = {
   endpointUrl: 'http://localhost:3300/graphql',
   production: false,
-  uploadUrl: 'http://localhost:3000/api/'
+  uploadUrl: 'http://localhost:3000/upload/image'
 };
 
 /*
