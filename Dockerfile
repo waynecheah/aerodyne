@@ -6,7 +6,7 @@ RUN npm ci && npm run build
 
 
 # Stage 2
-FROM nginx:1.20-alpine
+FROM nginx:1.25.3-alpine
 COPY nginx.conf /etc/nginx/conf.d/configfile.template
 COPY --from=build-step /app/dist/aerodyne /usr/share/nginx/html
 ENV PORT 8080
